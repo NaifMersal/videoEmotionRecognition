@@ -13,9 +13,8 @@ device= "cuda" if torch.cuda.is_available()else "cpu"
 def to_device(data, label):
     if isinstance(data, torch.Tensor):
         return data.to(device), label.to(device)
-
-    for i,d in enumerate(data):
-        data[i]=d.to(device)
+        
+    data=[d.to(device) for d in data]
     label=label.to(device)
     return data, label
     

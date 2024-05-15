@@ -2,7 +2,7 @@ import os
 import shutil
 import glob
 import subprocess
-from moviepy.editor import VideoFileClip
+from moviepy.editor import AudioFileClip
 import torch
 import torch.utils.data
 from torchvision import datasets, transforms
@@ -26,7 +26,6 @@ torch.cuda.manual_seed_all(seed)
 
 im_size=256
 every_s=0.2
-audio_sr=8000
 emotions = {
     "01": "Neutral",
     "02": "Calm",
@@ -76,30 +75,20 @@ def prepare_data():
     data_folder = get_data_location()
 
 
-    df = pd.DataFrame(columns=["video_name","mel_spec_path","image_path", "class"])
+    df = pd.DataFrame(columns=["video_dir","image_path", "class"])
     # Using glob.glob to get a list of files that match a pattern
     files=glob.glob('**/01-*.mp4', recursive=True)
     for path in tqdm(files,total=len(files),desc="preparing data", ncols=80):
-        vid_dir=data_folder+"/"+emotions[path[-18:-16]]+path[-25:-4]
-        os.makedirs(vid_dir+"/images", exist_ok=True)
-        os.makedirs(vid_dir+"/mel-spec", exist_ok=True)
+        vid_dir=data_folder+"/Classes/"+emotions[path[-18:-16]]+path[-25:-4]
+        images_path=f"{vid_dir}/images"
+        os.makedirs(images_path, exist_ok=True)
         subprocess.call(["ffmpeg", "-y", "-i", path, f"{vid_dir}/raw_audio.mp3"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        clip=VideoFileClip(path).resize(width=im_size,height=im_size)
-        time_stamps=np.arange(0,clip.duration, every_s)
-        for i in range(len(time_stamps)-1):
-            image_path=vid_dir+"/images/"+f"00{i}.jpeg"
-            mel_spec_path=vid_dir+"/mel-spec/"+f"00{i}.npy"
-            subclip=clip.subclip(t_start=time_stamps[i],t_end=time_stamps[i+1])
-            subclip.save_frame(image_path)
-            raw_sound=subclip.audio.to_soundarray(fps=audio_sr)
-            mel_spec=librosa.feature.melspectrogram(y=raw_sound, sr=audio_sr).squeeze(axis=2)
-            log_mel_spectrogram = librosa.power_to_db(mel_spec).astype(np.float32)
-            np.save(mel_spec_path,log_mel_spectrogram)
-            
-            #df.append({"video_name" : path[-25:-4], "mel_spec_path":mel_spec_path,"image_path":image_path, "class": emotions[path[-18:-16]]}, ignore_index=True)
-            df.loc[len(df)] = [path[-25:-4], mel_spec_path,image_path,  emotions[path[-18:-16]]]
+        subprocess.call(["ffmpeg", "-i", path,"-vf",f'fps={1/every_s}, scale=256:256', f"{images_path}/%03d.jpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        
+        for images in os.listdir(images_path):
+            df.loc[len(df)] = [vid_dir, images,  emotions[path[-18:-16]]]
     
-    df.to_csv(data_folder+"/metadata.csv")
+    df.to_csv(data_folder+"/metadata.csv", index=False)
 
 
 
